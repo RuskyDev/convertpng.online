@@ -1,28 +1,33 @@
 document.addEventListener('DOMContentLoaded', function () {
-    const fileInput = document.getElementById('fileInput');
-    const formatSelect = document.getElementById('formatSelect');
-    const convertButton = document.getElementById('convertButton');
-    const uploadStatus = document.getElementById('uploadStatus');
-    const chooseFileButton = document.getElementById('chooseFileButton');
-    const closeStatusButton = document.getElementById('closeStatus');
+    const fileInput = document.getElementById('Upload');
+    const formatSelect = document.getElementById('FormatSelector');
+    const convertButton = document.getElementById('UploadConvertButton');
+    const uploadStatus = document.getElementById('UploadConvertStatus');
+    const closeStatusButton = document.getElementById('UploadConvertStatusClose');
+    const notificationSound = document.getElementById('NotificationSound');
 
     let selectedFiles = [];
     let selectedFormat = 'jpg';
 
-    if (!fileInput || !formatSelect || !convertButton || !uploadStatus || !chooseFileButton || !closeStatusButton) {
+    if (!fileInput || !formatSelect || !convertButton || !uploadStatus || !closeStatusButton) {
         console.error('Required elements are missing.');
         return;
     }
-
-    chooseFileButton.addEventListener('click', function () {
-        fileInput.click();
-    });
 
     fileInput.addEventListener('change', handleFileInputChange, false);
 
     function handleFileInputChange(e) {
         selectedFiles = Array.from(e.target.files);
         updateUploadStatus('info');
+        if (selectedFiles.length > 0) {
+            updateUploadStatus('converting');
+            convertButton.textContent = 'Converting...';
+            if (selectedFiles.length === 1) {
+                convertSingleFile(selectedFiles[0]);
+            } else {
+                convertMultipleFiles(selectedFiles);
+            }
+        }
     }
 
     function updateUploadStatus(type) {
@@ -31,15 +36,22 @@ document.addEventListener('DOMContentLoaded', function () {
         if (type === 'error') {
             uploadStatus.classList.add('bg-red-500', 'text-white');
             uploadStatus.classList.remove('bg-green-500');
-            uploadStatus.querySelector('#uploadStatusMessage').textContent = `${selectedFiles.length > 0 ? `Files could not be processed.` : 'No files selected.'}`;
+            uploadStatus.querySelector('#UploadConvertStatusMessage').textContent = 'Error occurred, please check console!';
+            convertButton.textContent = 'Error';
+            notificationSound.play();
         } else if (type === 'success') {
             uploadStatus.classList.add('bg-green-500', 'text-white');
             uploadStatus.classList.remove('bg-red-500');
-            uploadStatus.querySelector('#uploadStatusMessage').textContent = `Conversion successful. Download will start shortly. Please wait.`;
+            uploadStatus.querySelector('#UploadConvertStatusMessage').textContent = 'Conversion successful. Download will start shortly. Please wait.';
+            notificationSound.play();
+        } else if (type === 'converting') {
+            uploadStatus.classList.add('bg-yellow-500', 'text-white');
+            uploadStatus.classList.remove('bg-red-500', 'bg-green-500', 'bg-blue-500');
+            uploadStatus.querySelector('#UploadConvertStatusMessage').textContent = 'Converting...';
         } else {
             uploadStatus.classList.add('bg-blue-500', 'text-white');
             uploadStatus.classList.remove('bg-red-500', 'bg-green-500');
-            uploadStatus.querySelector('#uploadStatusMessage').textContent = `${selectedFiles.length > 0 ? `${selectedFiles.length} file(s) selected.` : 'No files selected.'}`;
+            uploadStatus.querySelector('#UploadConvertStatusMessage').textContent = `${selectedFiles.length > 0 ? `${selectedFiles.length} file(s) selected.` : 'No files selected.'}`;
         }
     }
 
@@ -48,64 +60,56 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     convertButton.addEventListener('click', function () {
-        if (selectedFiles.length > 0) {
-            if (selectedFiles.length === 1) {
-                convertSingleFile(selectedFiles[0]);
-            } else {
-                convertMultipleFiles(selectedFiles);
-            }
-        } else {
-            updateUploadStatus('error');
+        if (selectedFiles.length === 0) {
+            fileInput.click();
         }
     });
 
     function convertSingleFile(file) {
-        if (selectedFormat === 'svg' && file.type === 'image/svg+xml') {
-            // Directly download SVG files
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(file);
-            a.download = file.name;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            updateUploadStatus('success');
-        } else {
-            const reader = new FileReader();
+        const reader = new FileReader();
 
-            reader.onload = function (e) {
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                const img = new Image();
+        reader.onload = function (e) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
 
-                img.onload = function () {
-                    canvas.width = img.width;
-                    canvas.height = img.height;
-                    ctx.drawImage(img, 0, 0);
+            img.onload = function () {
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0);
 
-                    const dataUrl = canvas.toDataURL(`image/${selectedFormat}`);
-                    const a = document.createElement('a');
-                    a.href = dataUrl;
-                    a.download = `image.${selectedFormat}`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
+                const dataUrl = canvas.toDataURL(`image/${selectedFormat}`);
+                const a = document.createElement('a');
+                const originalName = file.name.split('.').slice(0, -1).join('.') + `.${selectedFormat}`;
+                a.href = dataUrl;
+                a.download = originalName;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
 
-                    updateUploadStatus('success');
-                };
-
-                img.onerror = function () {
-                    updateUploadStatus('error');
-                };
-
-                img.src = e.target.result;
+                updateUploadStatus('success');
+                convertButton.textContent = 'Conversion successful';
+                setTimeout(() => location.reload(), 2000);
             };
 
-            reader.onerror = function () {
+            img.onerror = function () {
+                console.error('Image loading error');
                 updateUploadStatus('error');
+                convertButton.textContent = 'Error occurred, please check console!';
+                convertButton.disabled = true;
             };
 
-            reader.readAsDataURL(file);
-        }
+            img.src = e.target.result;
+        };
+
+        reader.onerror = function () {
+            console.error('File reading error');
+            updateUploadStatus('error');
+            convertButton.textContent = 'Error occurred, please check console!';
+            convertButton.disabled = true;
+        };
+
+        reader.readAsDataURL(file);
     }
 
     function convertMultipleFiles(files) {
@@ -113,43 +117,38 @@ document.addEventListener('DOMContentLoaded', function () {
 
         Promise.all(files.map(file => {
             return new Promise((resolve, reject) => {
-                if (selectedFormat === 'svg' && file.type === 'image/svg+xml') {
-                    file.text().then(svgText => {
-                        zip.file(file.name, svgText);
+                const reader = new FileReader();
+
+                reader.onload = function (e) {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    const img = new Image();
+
+                    img.onload = function () {
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        ctx.drawImage(img, 0, 0);
+
+                        const dataUrl = canvas.toDataURL(`image/${selectedFormat}`);
+                        const base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, '');
+                        zip.file(`${file.name.split('.')[0]}.${selectedFormat}`, base64Data, { base64: true });
                         resolve();
-                    }).catch(() => reject());
-                } else {
-                    const reader = new FileReader();
-
-                    reader.onload = function (e) {
-                        const canvas = document.createElement('canvas');
-                        const ctx = canvas.getContext('2d');
-                        const img = new Image();
-
-                        img.onload = function () {
-                            canvas.width = img.width;
-                            canvas.height = img.height;
-                            ctx.drawImage(img, 0, 0);
-
-                            const dataUrl = canvas.toDataURL(`image/${selectedFormat}`);
-                            const base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, '');
-                            zip.file(`${file.name.split('.')[0]}.${selectedFormat}`, base64Data, { base64: true });
-                            resolve();
-                        };
-
-                        img.onerror = function () {
-                            reject();
-                        };
-
-                        img.src = e.target.result;
                     };
 
-                    reader.onerror = function () {
+                    img.onerror = function () {
+                        console.error('Image loading error');
                         reject();
                     };
 
-                    reader.readAsDataURL(file);
-                }
+                    img.src = e.target.result;
+                };
+
+                reader.onerror = function () {
+                    console.error('File reading error');
+                    reject();
+                };
+
+                reader.readAsDataURL(file);
             });
         })).then(() => {
             zip.generateAsync({ type: 'blob' }).then(function (content) {
@@ -161,15 +160,17 @@ document.addEventListener('DOMContentLoaded', function () {
                 document.body.removeChild(a);
 
                 updateUploadStatus('success');
+                convertButton.textContent = 'Conversion successful';
+                convertButton.disabled = true;
+                setTimeout(() => location.reload(), 2000);
             });
         }).catch(() => {
             updateUploadStatus('error');
+            convertButton.textContent = 'Error occurred, please check console!';
         });
     }
 
-    if (closeStatusButton) {
-        closeStatusButton.addEventListener('click', function () {
-            uploadStatus.classList.add('hidden');
-        });
-    }
+    closeStatusButton.addEventListener('click', function () {
+        uploadStatus.classList.add('hidden');
+    });
 });
